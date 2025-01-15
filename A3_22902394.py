@@ -1,0 +1,280 @@
+#common imports already done
+#you may import other standard libraries if needed
+import csv
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from collections import Counter
+
+
+def load_metrics(filename):
+    """given a csv filename extracts columns in column order"""
+    result = []
+    #reads csv and converts into a list of rows
+    with open(filename) as csvfile:
+        reader = csv.reader(csvfile, delimiter=',')
+        for row in reader:
+            result.append(row)
+    # converts list into numpy array
+    array = np.array(result)
+    #removes columns
+    array1 = np.delete(array, [2,3,4,5,6,14], axis=1)
+    return array1
+
+def unstructured_to_structured(data, indexes):
+    """converts unstructured array to structured array"""
+    #deletes header row
+    array = np.delete(data, 0, axis=0)
+    # converts array to list of tuples
+    alist = array.tolist()
+    alist = [tuple(i) for i in alist]
+    # converts dtypes into float64 if index not in indexes
+    t = [["created_at", "U30"], ["tweet_ID", "U30"], ["valence_intensity", "U30"], ["anger_intensity", "U30"], ["fear_intensity", "U30"], ["sadness_intensity", "U30"], ["joy_intensity", "U30"], ["sentiment_category", "U30"], ["emotion_category", "U30"]]
+    for ind in range(len(t)):
+        if ind not in indexes:
+            for element in t[ind]:
+                t[ind] = [t[ind][0], element.replace(element, "float64")]
+    
+    #makes new array with updated dtypes from t
+    tlst = [tuple(i) for i in t]
+    dt = np.dtype(tlst)
+    array1 = np.array(alist, dt)
+    return array1
+
+
+def converting_timestamps(array):
+    """converts array timestamps into datetime format"""
+    months = {
+                'Jan': "01",
+                'Feb': "02",
+                'Mar': "03",
+                'Apr': "04",
+                'May': "05",
+                'Jun': "06",
+                'Jul': "07",
+                'Aug': "08",
+                'Sep': "09", 
+                'Oct': "10",
+                'Nov': "11",
+                'Dec': "12"}
+    # assigns element in timestamp to month, day_val etc. and formats, 
+    # month is replaced with month value in dictionary
+    for time in range(len(array)):
+        lst = array[time].split()
+        month = lst[1]
+        day_val = lst[2]
+        hms = lst[3]
+        year = lst[5]        
+        array[time] = "{}-{}-{} {}".format(year, months[month], day_val, hms)
+    
+    return array
+
+
+#below code randomly adds nan to the data
+#assuming your output from task 1 is named 'data'. replace it as needed.
+dropout = 0.1
+intensity = ['valence_intensity', 'anger_intensity', 'fear_intensity', 
+       'sadness_intensity', 'joy_intensity']
+
+#Uncomment below 4 lines when you reach task 4.
+#for val in intensity:
+    #data[:][val][np.random.choice(data[:][val].size, 
+                                  #int(dropout * data[:][val].size), 
+                                  #replace=False)] = np.nan
+
+def replace_nan(data):
+    """replaces nan objects in column with mean of the column"""
+    d = np.dtype([("created_at", "U30"), ("tweet_id", "U30"), ("valence_intensity", float), ("anger_intensity", float), ("fear_intensity", float), ("sadness_intensity", float), ("joy_intensity", float), ("sentiment_category", "U30"), ("emotion_category", "U30")])
+    # iterates over dtypes and replaces value with nanmean of the column
+    for name in range(2,7):
+        data[d.names[name]] = np.nan_to_num(data[d.names[name]], copy=False, nan =np.nanmean(data[d.names[name]]))
+    return data
+
+def boxplot_data(data, output_name ="output.png"):
+    """creates and saves a boxplot figure from structured array"""
+    # Create a figure instance
+    fig = plt.figure(1, figsize=(10, 7))
+
+    # Create an axes instance
+    ax = fig.add_subplot(111)
+    dv = list(data["valence_intensity"])
+    da = list(data["anger_intensity"])
+    df = list(data["fear_intensity"])
+    ds = list(data["sadness_intensity"])
+    dj = list(data["joy_intensity"])
+    
+    #color dictionary
+    c = "black"
+    black_dict =  {'patch_artist': True,
+                 'boxprops': dict(color=c, facecolor=c),
+                 'capprops': dict(color=c),
+                 'flierprops': dict(color=c, markeredgecolor=c),
+                 'medianprops': dict(color=c),
+                 'whiskerprops': dict(color=c)}
+    
+    # Create the boxplot
+    bp = ax.boxplot([dv, da, df, ds, dj], **black_dict)
+    
+    # changes outline color
+    for box in bp['boxes']:
+        box.set(color='black', linewidth=1, linestyle= '-')
+    
+    # changes fill color
+    colors = ['green', 'red', 'purple', 'blue', 'yellow']
+    for color, box in zip(colors, bp['boxes']):
+        box.set(facecolor = color)
+    
+    ax.set_xticklabels(['Valence', 'Anger', 'Fear', 'Sadness', "Joy"])
+    plt.title("Distribution of Sentiment")
+    plt.xlabel("Sentiment")
+    plt.ylabel("Values")
+    # gridlines
+    plt.grid(axis='y')
+    plt.show()
+    #Only comment below line when debugging. Uncomment when submitting
+    plt.savefig(output_name)
+    
+
+def number_of_outliers(sentiment, lower, upper):
+    """returns count of outliers in sentiment given lower and upper bounds"""
+    # gets percentiles from bounds
+    p_lower = np.percentile(sentiment, lower)
+    p_upper = np.percentile(sentiment, upper)
+    count = 0
+    #counts how many values within percentile range
+    for num in sentiment:
+        if num >= p_upper or num <= p_lower:
+            count += 1
+    return count
+
+
+def convert_to_df(data):
+    """converts structured array to pandas dataframe"""
+    dt = np.dtype([("created_at", "U30"), ("tweet_ID", "U30"), ("valence_intensity", float), ("anger_intensity", float), ("fear_intensity", float), ("sadness_intensity", float), ("joy_intensity", float), ("sentiment_category", "U30"), ("emotion_category", "U30")]) # creating numpy dtype
+    # create pandas dataframe with dtype.names for columns, ignores actual dtype values
+    df = pd.DataFrame(data, columns = dt.names)
+    return df
+
+
+def load_tweets(filename):
+    """reads and converts given tsv file into pandas dataframe"""
+    result = []
+    # reads tsv and converts into array
+    with open(filename, "r", encoding="utf-8") as tsvfile:
+        reader = csv.reader(tsvfile, delimiter="\t")
+        for row in reader:
+            result.append(row)
+    array = np.array(result)
+    # deletes headers
+    array1 = np.delete(array, 0, axis=0)
+    # converts array into list of tuples then back into new array
+    alist = array1.tolist()
+    alist = [tuple(i) for i in alist]
+    array2 = np.array(alist)
+    # creates dtype and creates pandas dataframe with assigned dtype names
+    dt = np.dtype([("id", float), ("text", "U30"), ("screen_name", "U30"), ("followers", "U30"), ("freinds", "U30"), ("user_ID", float), ("country_region", "U30")])
+    df = pd.DataFrame(array2, columns= dt.names)
+    # converts id and user_ID columns into float datatypes
+    df['id'] = df['id'].astype(float)
+    df['user_ID'] = df['user_ID'].astype(float)
+    return df
+
+def merge_dataframes(df_metrics, df_tweets):
+    """merges two dataframes by 'inner' join method"""
+    df1 = df_tweets
+    df2 = df_metrics
+    
+    # rename id column to tweet_ID for join method
+    df1 = df1.rename(columns={"id": "tweet_ID"})
+    
+    # converts id columns into integer datatypes
+    df2['tweet_ID'] = df2['tweet_ID'].astype("float64").astype("int64")
+    df1['tweet_ID'] = df1['tweet_ID'].astype("float64").astype("int64")
+    
+    # inner join method merges dataframes
+    df = df1.join(df2.set_index("tweet_ID"), on="tweet_ID", how="inner")
+    df = df.dropna() # drops nan values
+    return df
+
+def plot_timeperiod(df_merged, from_date, to_date, output_name="output.png"):
+    """plots sentiment category values over a certain time period"""
+    # convert date bounds to datetime datatype
+    fd = pd.to_datetime(from_date)
+    td = pd.to_datetime(to_date)
+    
+    # set agg.path.chunksize so that the code can render larger datapoints
+    plt.rcParams['agg.path.chunksize'] = 10000
+    
+    # rename created_at column to date for easy reference
+    df_merged = df_merged.rename(columns={"created_at":"date"})
+    # change created_at column to datetime datatype and sort
+    df_merged['date'] = pd.to_datetime(df_merged['date'])
+    df = df_merged.sort_values(by='date')
+    
+    # filter by bounds
+    f = df[(df['date']> fd) & (df['date']< td)]
+    
+    # create figure
+    fig=plt.figure(figsize=(15,8))
+    ax=fig.add_subplot(111)
+    
+    # make x axis label and set tick rotation and horizontal alignment
+    plt.xlabel("created_at")
+    plt.xticks(rotation=30, ha='right')
+    
+    # plot lines onto figure and set line colors
+    ax.plot(f.loc[:, "date"], f.loc[:, "valence_intensity"], color="green", label = "valence_intensity")
+    ax.plot(f.loc[:, "date"], f.loc[:, "anger_intensity"], color="red", label = "anger_intensity")
+    ax.plot(f.loc[:, "date"], f.loc[:, "fear_intensity"], color="purple", label = "fear_intensity")
+    ax.plot(f.loc[:, "date"], f.loc[:, "sadness_intensity"], color="blue", label = "sadness_intensity")
+    ax.plot(f.loc[:, "date"], f.loc[:, "joy_intensity"], color="yellow", label = "joy_intensity")
+    
+    # make legend to upper left
+    plt.legend(loc="upper left")
+    #Only comment below line when debugging. Uncomment when submitting
+    plt.savefig(output_name)
+
+
+def get_top_n_words(column, n):
+    """retrieves the top n words and their frequencies from given data"""
+    frequencies = Counter()
+    column.str.lower().str.split().apply(frequencies.update)
+    return frequencies.most_common(n)
+
+
+#How to use get_top_n_words function below.
+#here, variable 'df_merged' is the output from task 9
+
+
+
+
+
+def plot_frequency(word_frequency, n, output_name="output.png"):
+    """plots bar graph of top n word frequencies"""
+    #partially completed for you, complete the rest according to the instructions.
+    
+    # setting up plot variables
+    words = tuple(zip(*word_frequency))[0]
+    frequencies = tuple(zip(*word_frequency))[1]
+    y_pos = np.arange(len(words))
+    
+    # creating figure with correct figsize
+    fig=plt.figure(figsize=(15,10))
+    ax=fig.add_subplot(111)
+    
+    # set up color spectrum
+    colors = ["red", "orange", "yellow", "green", "blue", "indigo", "violet"]
+    clist = [(0, "red"), (1/6, "orange"), (2/6, "yellow"), (3/6, "green"), (4/6, "blue"), (5/6, "indigo"), (1, "violet")]
+    rvb = mcolors.LinearSegmentedColormap.from_list("", clist)
+    nlist = np.arange(n).astype(float)
+    
+    # assigns yticks to respective words and inverts y-axis order
+    plt.yticks(-y_pos, words)
+    ax.barh(-y_pos, frequencies, color=rvb(nlist/n), align="center")
+    # sets x axis label and title
+    plt.xlabel("Frequency")
+    plt.title("Word Frequency: Top {}".format(n))
+    #Only comment below line when debugging. Uncomment when submitting
+    plt.savefig(output_name)
+    
